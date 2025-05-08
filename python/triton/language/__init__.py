@@ -129,6 +129,9 @@ from .random import (
     randn4x,
     uint_to_uniform_float,
 )
+from .linalg import (
+    elementwise_add,
+)
 
 __all__ = [
     "PropagateNan",
@@ -176,6 +179,7 @@ __all__ = [
     "dot",
     "dot_scaled",
     "dtype",
+    "elementwise_add",
     "erf",
     "exp",
     "exp2",

@@ -9,9 +9,12 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
@@ -383,6 +386,7 @@ void init_triton_ir(py::module &&m) {
     DialectRegistry registry;
     registry.insert<TritonDialect, ::mlir::triton::gpu::TritonGPUDialect,
                     math::MathDialect, arith::ArithDialect, scf::SCFDialect,
+                    linalg::LinalgDialect, tensor::TensorDialect,
                     ::mlir::gpu::GPUDialect, cf::ControlFlowDialect,
                     ::mlir::triton::proton::ProtonDialect, LLVM::LLVMDialect,
                     mlir::ub::UBDialect>();
@@ -1241,6 +1245,39 @@ void init_triton_ir(py::module &&m) {
            [](TritonOpBuilder &self, Value &lhs, Value &rhs) -> Value {
              return Value(self.create<arith::MinUIOp>(lhs, rhs));
            })
+      .def("create_linalg_elemwise_binary_add",
+            [](TritonOpBuilder &self, Value &lhs, Value &rhs) -> Value {
+              using namespace mlir::linalg;
+              using namespace mlir::tensor;
+              auto &b  = self.getBuilder();
+              auto loc = self.getLastLoc();
+              auto ttype = mlir::dyn_cast<RankedTensorType>(lhs.getType());
+              assert(ttype && "expected a ranked tensor");
+              Value empty = self.create<tensor::EmptyOp>(ttype.getShape(), ttype.getElementType());
+              empty.dump();
+              lhs.dump();
+              rhs.dump();
+              mlir::linalg::BinaryFnAttr binaryFn =
+                  mlir::linalg::BinaryFnAttr::get(b.getContext(), mlir::linalg::BinaryFn::add);
+              mlir::NamedAttribute attr = b.getNamedAttr("fun", binaryFn);
+
+              //OperationState state(loc, linalg::ElemwiseBinaryOp::getOperationName());
+              //state.addTypes(ttype);
+              //state.addOperands(inputs);
+              //state.addOperands(outputs);
+              //SymbolRefAttr fun =
+              //  b.getSymbolRefAttr("linalg.binary_fn", "add");
+              //state.addAttribute("fun", binaryFn);
+
+              //mlir::linalg::TypeFnAttr cast = mlir::linalg::TypeFnAttr::get(b.getContext(), mlir::linalg::TypeFn::cast_signed);
+              linalg::ElemwiseBinaryOp elemOp = b.create<linalg::ElemwiseBinaryOp>(
+                  loc, ttype, //mlir::linalg::LinalgOp::getTraitName(mlir::linalg::LinalgTraits::Elementwise),
+                  mlir::ValueRange{lhs, rhs}, mlir::ValueRange{empty}, mlir::ArrayRef<mlir::NamedAttribute>{attr});
+              //Operation *op = b.create(state);
+              elemOp.dump();
+
+              return elemOp.getResult(0);
+            })
       // minimumf follows the torch.minimum convention and returns NaN if either
       // operand is NaN
       .def("create_minimumf",
